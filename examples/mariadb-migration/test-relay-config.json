@@ -1,0 +1,26 @@
+{
+  "source": {
+    "username": "ubuntu",
+    "hostIP": "127.0.0.1",
+    "sshPort": 22,
+    "path": "/tmp/mariadb_source_backup",
+    "sshPrivateKey": "~/.ssh/id_rsa",
+    "backupCmd": "mkdir -p /tmp/mariadb_source_backup && echo 'This is test backup data from source' > /tmp/mariadb_source_backup/test_db.sql"
+  },
+  "destination": {
+    "username": "ubuntu",
+    "hostIP": "127.0.0.1",
+    "sshPort": 22,
+    "path": "/tmp/mariadb_dest_backup",
+    "sshPrivateKey": "~/.ssh/id_rsa",
+    "restoreCmd": "mkdir -p /tmp/mariadb_dest_backup && cat /tmp/mariadb_dest_backup/test_db.sql && echo 'Restore completed successfully'"
+  },
+  "rsyncOptions": {
+    "compress": true,
+    "archive": true,
+    "verbose": true,
+    "delete": false,
+    "progress": true,
+    "insecureSkipHostKeyVerification": true
+  }
+}

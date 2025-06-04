@@ -1,0 +1,34 @@
+{
+  "source": {
+    "username": "ubuntu",
+    "hostIP": "192.168.1.10",
+    "sshPort": 22,
+    "path": "/var/lib/mysql/backup",
+    "sshPrivateKey": "~/.ssh/id_rsa",
+    "backupCmd": "mkdir -p /var/lib/mysql/backup && sudo mysqldump -u root -p'your_root_password' --all-databases --events --routines --triggers --single-transaction > /var/lib/mysql/backup/all_databases.sql"
+  },
+  "destination": {
+    "username": "ubuntu",
+    "hostIP": "192.168.1.20",
+    "sshPort": 22,
+    "path": "/home/ubuntu/mariadb_backup",
+    "sshPrivateKey": "~/.ssh/vm_key.pem",
+    "restoreCmd": "mkdir -p /home/ubuntu/mariadb_backup && docker exec -i mariadb_target mysql -u root -p'your_root_password' < /home/ubuntu/mariadb_backup/all_databases.sql"
+  },
+  "rsyncOptions": {
+    "compress": true,
+    "archive": true,
+    "verbose": true,
+    "delete": false,
+    "progress": true,
+    "insecureSkipHostKeyVerification": true,
+    "exclude": [
+      "*.tmp",
+      "*.log"
+    ],
+    "extraArgs": [
+      "--checksum",
+      "--timeout=300"
+    ]
+  }
+}
