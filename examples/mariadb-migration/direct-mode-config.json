@@ -1,0 +1,36 @@
+{
+  "source": {
+    "username": "",
+    "hostIP": "",
+    "sshPort": 0,
+    "dataPath": "/home/ubuntu/mariadb_dump/",
+    "sshPrivateKeyPath": "",
+    "backupCmd": "docker exec mariadb_source mariadb-dump -u root -p'your_root_password' poc_db > ~/mariadb_dump/poc_db_dump.sql"
+  },
+  "destination": {
+    "username": "ubuntu",
+    "hostIP": "15.164.242.198",
+    "sshPort": 22,
+    "dataPath": "/home/ubuntu/mariadb_dump/",
+    "sshPrivateKeyPath": "~/.ssh/kimy-aws.pem",
+    "restoreCmd": "docker exec -i mariadb_target mariadb -u root -p'your_root_password' poc_db < ~/mariadb_dump/poc_db_dump.sql"
+  },
+  "rsyncOptions": {
+    "compress": true,
+    "archive": true,
+    "verbose": true,
+    "delete": false,
+    "progress": true,
+    "dryRun": false,
+    "insecureSkipHostKeyVerification": false,
+    "exclude": [
+      "*.tmp",
+      "*.log"
+    ],
+    "include": [],
+    "extraArgs": [
+      "--checksum",
+      "--timeout=300"
+    ]
+  }
+}

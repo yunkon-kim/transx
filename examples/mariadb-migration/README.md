@@ -10,12 +10,16 @@ This example performs the following tasks:
 2. Transfer backup files to the target server (rsync)
 3. Database restoration on the target MariaDB
 
-Supported migration scenarios:
+Supported migration modes:
 
-- Local migration (testing on the same machine)
-- Remote migration (migrating to another machine)
-- Server to VM migration (transferring database from existing server to VM)
-- Relay migration (when both source and target are remote, the local system acts as an intermediary)
+1. **Direct Mode**: One-step direct transfer between source and destination
+
+   - Local-to-local (testing on the same machine)
+   - Local-to-remote (local source to a remote destination)
+   - Remote-to-local (remote source to local destination)
+
+2. **Relay Mode**: Two-step transfer where both source and destination are remote
+   - Source → Local Machine → Destination (local system acts as an intermediary)
 
 ## Prerequisites
 
@@ -40,9 +44,34 @@ This script performs the following tasks:
 
 ## How to Run the Example
 
-### Using the Simple Test Script
+### Using the Simple Migration Script
 
-You can easily test various migration scenarios using the provided test script:
+The easiest way to run migrations is to use the included migrate.sh script:
+
+```bash
+chmod +x migrate.sh
+./migrate.sh [direct|relay] [flags]
+```
+
+Examples:
+
+```bash
+# Run direct mode migration (default)
+./migrate.sh direct
+
+# Run relay mode migration
+./migrate.sh relay
+
+# Run direct mode with verbose logging
+./migrate.sh direct --verbose
+
+# Run only the backup step in relay mode
+./migrate.sh relay --backup
+```
+
+### Using the Test Migration Script
+
+For more advanced testing scenarios, you can use the test_migration.sh script:
 
 ```bash
 chmod +x test_migration.sh
@@ -52,39 +81,44 @@ chmod +x test_migration.sh
 Examples:
 
 ```bash
-# Test local migration
-./test_migration.sh local
+# Test direct mode migration
+./test_migration.sh direct
 
-# Test relay mode (for testing between 127.0.0.1)
+# Test relay mode migration
+./test_migration.sh relay
+
+# Run only the backup step for relay migration
+./test_migration.sh relay backup
+
+# Run test relay migration
 ./test_migration.sh test
-
-# Run only the backup step for server-VM migration
-./test_migration.sh vm backup
 ```
 
 ### Preparing JSON Configuration Files
 
-Prepare a JSON configuration file for the migration task. Example files are as follows:
+Choose one of the two available configuration templates based on your migration needs:
 
-#### Local Migration Configuration (migration-config.json)
+#### Direct Mode Configuration (direct-mode-config.json)
+
+For local-to-local, local-to-remote, or remote-to-local migrations:
 
 ```json
 {
   "source": {
     "username": "ubuntu",
-    "hostIP": "",
+    "hostIP": "", // Leave empty for local source, or set to IP/hostname for remote
     "sshPort": 22,
-    "path": "/home/ubuntu/mariadb_dump",
+    "path": "/path/to/backup", // Source backup directory path
     "sshPrivateKey": "~/.ssh/id_rsa",
-    "backupCmd": "docker exec mariadb_source mariadb-dump -u root -p'your_root_password' poc_db > /home/ubuntu/mariadb_dump/poc_db_dump.sql"
+    "backupCmd": "docker exec mariadb_source mariadb-dump -u root -p'password' database_name > /path/to/backup/dump.sql"
   },
   "destination": {
     "username": "ubuntu",
-    "hostIP": "",
+    "hostIP": "", // Leave empty for local destination, or set to IP/hostname for remote
     "sshPort": 22,
-    "path": "/home/ubuntu/mariadb_dump",
+    "path": "/path/to/restore", // Destination restore directory path
     "sshPrivateKey": "~/.ssh/id_rsa",
-    "restoreCmd": "docker exec -i mariadb_target mariadb -u root -p'your_root_password' poc_db < /home/ubuntu/mariadb_dump/poc_db_dump.sql"
+    "restoreCmd": "docker exec -i mariadb_target mariadb -u root -p'password' database_name < /path/to/restore/dump.sql"
   },
   "rsyncOptions": {
     "compress": true,
@@ -92,7 +126,9 @@ Prepare a JSON configuration file for the migration task. Example files are as f
     "verbose": true,
     "delete": false,
     "progress": true,
-    "insecureSkipHostKeyVerification": true
+    "insecureSkipHostKeyVerification": false,
+    "exclude": ["*.tmp", "*.log"],
+    "extraArgs": ["--checksum", "--timeout=300"]
   }
 }
 ```
@@ -146,29 +182,58 @@ Migrating data to a remote system:
 go run main.go --config=remote-migration-config.json
 ```
 
+### Using the run_migration.sh Script
+
+The `run_migration.sh` script provides a more user-friendly way to run migrations with either direct or relay mode:
+
+```bash
+chmod +x run_migration.sh
+./run_migration.sh [options]
+```
+
+Examples:
+
+```bash
+# Run direct mode migration locally
+./run_migration.sh --mode direct
+
+# Run direct mode migration to a remote server
+./run_migration.sh --mode direct --dest-host 192.168.1.20 --dest-user ubuntu
+
+# Run relay mode migration (through local machine)
+./run_migration.sh --mode relay --source-host 192.168.1.10 --source-user user1 --dest-host 192.168.1.20 --dest-user user2
+```
+
+Options:
+
+- `--mode`: Specify `direct` or `relay` migration mode
+- `--source-host`, `--source-user`, `--source-key`: Source server connection details
+- `--dest-host`, `--dest-user`, `--dest-key`: Destination server connection details
+
 ### Running Individual Steps
 
 To run specific steps only, you can use the following flags:
 
 ```bash
 # Run backup step only
-go run main.go --config=migration-config.json --backup
+go run main.go --config=direct-mode-config.json --backup
 
 # Run transfer step only
-go run main.go --config=migration-config.json --transfer
+go run main.go --config=direct-mode-config.json --transfer
 
 # Run restore step only
-go run main.go --config=migration-config.json --restore
+go run main.go --config=direct-mode-config.json --restore
 ```
 
 ## Available Flags
 
-| Flag         | Description                     | Default                 |
-| ------------ | ------------------------------- | ----------------------- |
-| `--config`   | Migration config JSON file path | `migration-config.json` |
-| `--backup`   | Run backup step only            | `false`                 |
-| `--transfer` | Run transfer step only          | `false`                 |
-| `--restore`  | Run restore step only           | `false`                 |
+| Flag         | Description                     | Default                   |
+| ------------ | ------------------------------- | ------------------------- |
+| `--config`   | Migration config JSON file path | `direct-mode-config.json` |
+| `--backup`   | Run backup step only            | `false`                   |
+| `--transfer` | Run transfer step only          | `false`                   |
+| `--restore`  | Run restore step only           | `false`                   |
+| `--verbose`  | Enable verbose logging          | `false`                   |
 
 ## Example Scenarios
 

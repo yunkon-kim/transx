@@ -22,12 +22,12 @@ type EndpointDetails struct {
 	HostIP   string // Hostname or IP address for SSH connection (e.g., "server.example.com" or "192.168.1.100")
 	SSHPort  int    // SSH port (0 or unspecified uses default 22)
 
-	// Path for both local and remote operations
-	Path string // File path (e.g., "/home/user/data" for remote or "/var/backups/data" for local)
+	// DataPath for both local and remote operations
+	DataPath string // Data path (e.g., "/home/user/data" for remote or "/var/backups/data" for local)
 
-	SSHPrivateKey string // Path to the SSH private key file (used for remote connections with key authentication)
-	BackupCmd     string // Backup command string to be executed on this endpoint
-	RestoreCmd    string // Restore command string to be executed on this endpoint
+	SSHPrivateKeyPath string // Path to the SSH private key file (used for remote connections with key authentication)
+	BackupCmd         string // Backup command string to be executed on this endpoint
+	RestoreCmd        string // Restore command string to be executed on this endpoint
 }
 
 // RsyncOption defines options to be applied when executing rsync commands and SSH connection options.
@@ -41,7 +41,7 @@ type RsyncOption struct {
 	RsyncPath string   // Path to the rsync executable (if empty, uses system PATH)
 	Exclude   []string // --exclude=PATTERN: List of patterns to exclude
 	Include   []string // --include=PATTERN: List of patterns to include
-	ExtraArgs []string // List of other rsync arguments to pass directly
+	// ExtraArgs []string // List of other rsync arguments to pass directly
 
 	// InsecureSkipHostKeyVerification, if true, relaxes host key checking for SSH connections.
 	// Adds "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null" options.
@@ -59,11 +59,11 @@ func (e *EndpointDetails) isRemote() bool {
 func (e *EndpointDetails) getRsyncPath() string {
 	if e.isRemote() {
 		if strings.TrimSpace(e.Username) != "" {
-			return fmt.Sprintf("%s@%s:%s", e.Username, e.HostIP, e.Path)
+			return fmt.Sprintf("%s@%s:%s", e.Username, e.HostIP, e.DataPath)
 		}
-		return fmt.Sprintf("%s:%s", e.HostIP, e.Path) // Username might be optional if SSH config handles it
+		return fmt.Sprintf("%s:%s", e.HostIP, e.DataPath) // Username might be optional if SSH config handles it
 	}
-	return e.Path
+	return e.DataPath
 }
 
 // IsRelayMode determines if both source and destination endpoints are remote.
@@ -78,10 +78,10 @@ func Validate(task DataMigrationModel) error {
 	sourceRsyncPath := task.Source.getRsyncPath()
 	destRsyncPath := task.Destination.getRsyncPath()
 
-	if strings.TrimSpace(sourceRsyncPath) == "" || strings.TrimSpace(task.Source.Path) == "" {
+	if strings.TrimSpace(sourceRsyncPath) == "" || strings.TrimSpace(task.Source.DataPath) == "" {
 		return fmt.Errorf("source path must be provided for rsync task")
 	}
-	if strings.TrimSpace(destRsyncPath) == "" || strings.TrimSpace(task.Destination.Path) == "" {
+	if strings.TrimSpace(destRsyncPath) == "" || strings.TrimSpace(task.Destination.DataPath) == "" {
 		return fmt.Errorf("destination path must be provided for rsync task")
 	}
 
@@ -108,8 +108,8 @@ func Validate(task DataMigrationModel) error {
 	return nil
 }
 
-// Execute runs the rsync command to transfer data as defined by the given DataMigrationModel.
-func Execute(task DataMigrationModel) error {
+// Transfer runs the rsync command to transfer data as defined by the given DataMigrationModel.
+func Transfer(task DataMigrationModel) error {
 	if err := Validate(task); err != nil {
 		return fmt.Errorf("rsync task validation failed: %w", err)
 	}
@@ -155,10 +155,10 @@ func Execute(task DataMigrationModel) error {
 		}
 	}
 
-	// Configure extra rsync arguments
-	if len(task.RsyncOptions.ExtraArgs) > 0 {
-		args = append(args, task.RsyncOptions.ExtraArgs...)
-	}
+	// // Configure extra rsync arguments
+	// if len(task.RsyncOptions.ExtraArgs) > 0 {
+	// 	args = append(args, task.RsyncOptions.ExtraArgs...)
+	// }
 
 	// Configure SSH options (-e)
 	// rsync uses only one remote shell command.
@@ -176,11 +176,11 @@ func Execute(task DataMigrationModel) error {
 		operationInvolvesRemoteRsync = true
 	}
 
-	if operationInvolvesRemoteRsync && activeRemoteEndpointForRsync.SSHPrivateKey != "" {
+	if operationInvolvesRemoteRsync && activeRemoteEndpointForRsync.SSHPrivateKeyPath != "" {
 		var sshCmdParts []string
 		sshCmdParts = append(sshCmdParts, "ssh")
-		if strings.TrimSpace(activeRemoteEndpointForRsync.SSHPrivateKey) != "" {
-			sshCmdParts = append(sshCmdParts, "-i", activeRemoteEndpointForRsync.SSHPrivateKey)
+		if strings.TrimSpace(activeRemoteEndpointForRsync.SSHPrivateKeyPath) != "" {
+			sshCmdParts = append(sshCmdParts, "-i", activeRemoteEndpointForRsync.SSHPrivateKeyPath)
 		}
 		if activeRemoteEndpointForRsync.SSHPort != 0 { // If 0, use default port (22)
 			sshCmdParts = append(sshCmdParts, "-p", strconv.Itoa(activeRemoteEndpointForRsync.SSHPort))
@@ -281,8 +281,8 @@ func executeCommand(commandToExecute string, endpoint EndpointDetails, sshConfig
 
 		var sshCmdParts []string
 		sshCmdParts = append(sshCmdParts, "ssh") // SSH command
-		if strings.TrimSpace(endpoint.SSHPrivateKey) != "" {
-			sshCmdParts = append(sshCmdParts, "-i", endpoint.SSHPrivateKey) // Private key
+		if strings.TrimSpace(endpoint.SSHPrivateKeyPath) != "" {
+			sshCmdParts = append(sshCmdParts, "-i", endpoint.SSHPrivateKeyPath) // Private key
 		}
 		if endpoint.SSHPort != 0 { // SSH port (if not 0)
 			sshCmdParts = append(sshCmdParts, "-p", strconv.Itoa(endpoint.SSHPort))
@@ -314,26 +314,30 @@ func executeCommand(commandToExecute string, endpoint EndpointDetails, sshConfig
 	}
 }
 
-// Backup executes the BackupCmd defined in the target EndpointDetails.
-// Uses SSH options from sshConfig if the command needs to be run remotely.
-func Backup(target EndpointDetails, sshConfig RsyncOption) error {
-	if strings.TrimSpace(target.BackupCmd) == "" {
-		return fmt.Errorf("backup command is not defined for target")
+// Backup executes the BackupCmd defined in the source EndpointDetails of the DataMigrationModel.
+func Backup(dmm DataMigrationModel) error {
+	// Use source endpoint for backup operations
+	source := dmm.Source
+	if strings.TrimSpace(source.BackupCmd) == "" {
+		return fmt.Errorf("backup command is not defined for source")
 	}
 
-	// Path for logging/error messages
-	logPath := target.Path
-	if target.isRemote() {
-		logPath = fmt.Sprintf("%s@%s:%s", target.Username, target.HostIP, target.Path)
-		fmt.Printf("Executing backup command on remote server %s...\n", target.HostIP)
+	// Determine the source path for display
+	// This allows us to handle both local and remote backups properly.
+	// If it's a remote source, format it as "username@host:path" and the command will be executed remotely.
+	// If it's a local source, just use the DataPath directly.
+	sourcePath := source.DataPath
+	if source.isRemote() {
+		sourcePath = fmt.Sprintf("%s@%s:%s", source.Username, source.HostIP, source.DataPath)
+		fmt.Printf("Executing backup command on remote server %s...\n", source.HostIP)
 	} else {
 		fmt.Println("Executing backup command locally...")
 	}
 
-	fmt.Printf("Backup command: %s\n", target.BackupCmd)
-	output, err := executeCommand(target.BackupCmd, target, sshConfig)
+	fmt.Printf("Backup command: %s\n", source.BackupCmd)
+	output, err := executeCommand(source.BackupCmd, source, dmm.RsyncOptions)
 	if err != nil {
-		return fmt.Errorf("backup command execution failed for target '%s': %w\nOutput:\n%s", logPath, err, string(output))
+		return fmt.Errorf("backup command execution failed for source '%s': %w\nOutput:\n%s", sourcePath, err, string(output))
 	}
 
 	// Show output summary
@@ -347,25 +351,30 @@ func Backup(target EndpointDetails, sshConfig RsyncOption) error {
 	return nil
 }
 
-// Restore executes the RestoreCmd defined in the target EndpointDetails.
-// Uses SSH options from sshConfig if the command needs to be run remotely.
-func Restore(target EndpointDetails, sshConfig RsyncOption) error {
-	if strings.TrimSpace(target.RestoreCmd) == "" {
-		return fmt.Errorf("restore command is not defined for target")
+// Restore executes the RestoreCmd defined in the destination EndpointDetails of the DataMigrationModel.
+func Restore(dmm DataMigrationModel) error {
+	// Use destination endpoint for restore operations
+	destination := dmm.Destination
+	if strings.TrimSpace(destination.RestoreCmd) == "" {
+		return fmt.Errorf("restore command is not defined for destination")
 	}
 
-	logPath := target.Path
-	if target.isRemote() {
-		logPath = fmt.Sprintf("%s@%s:%s", target.Username, target.HostIP, target.Path)
-		fmt.Printf("Executing restore command on remote server %s...\n", target.HostIP)
+	// Determine the destination path for display
+	// This allows us to handle both local and remote restores properly.
+	// If it's a remote destination, format it as "username@host:path" and the command will be executed remotely.
+	// If it's a local destination, just use the DataPath directly.
+	destinationDataPath := destination.DataPath
+	if destination.isRemote() {
+		destinationDataPath = fmt.Sprintf("%s@%s:%s", destination.Username, destination.HostIP, destination.DataPath)
+		fmt.Printf("Executing restore command on remote server %s...\n", destination.HostIP)
 	} else {
 		fmt.Println("Executing restore command locally...")
 	}
 
-	fmt.Printf("Restore command: %s\n", target.RestoreCmd)
-	output, err := executeCommand(target.RestoreCmd, target, sshConfig)
+	fmt.Printf("Restore command: %s\n", destination.RestoreCmd)
+	output, err := executeCommand(destination.RestoreCmd, destination, dmm.RsyncOptions)
 	if err != nil {
-		return fmt.Errorf("restore command execution failed for target '%s': %w\nOutput:\n%s", logPath, err, string(output))
+		return fmt.Errorf("restore command execution failed for destination '%s': %w\nOutput:\n%s", destinationDataPath, err, string(output))
 	}
 
 	// Show output summary
@@ -376,5 +385,39 @@ func Restore(target EndpointDetails, sshConfig RsyncOption) error {
 	} else if len(outputStr) > 0 {
 		fmt.Printf("Restore command output: %s\n", outputStr)
 	}
+	return nil
+}
+
+// MigrateData manages the complete data migration workflow:
+// 1. If Source.BackupCmd is available, perform Backup
+// 2. Always perform Transfer
+// 3. If Destination.RestoreCmd is available, perform Restore
+// This provides a simple one-call approach to handle the entire data migration pipeline.
+func MigrateData(dmm DataMigrationModel) error {
+	// Step 1: Check and perform backup if BackupCmd is defined
+	if strings.TrimSpace(dmm.Source.BackupCmd) != "" {
+		fmt.Println("Step 1: Backing up data...")
+		if err := Backup(dmm); err != nil {
+			return fmt.Errorf("backup operation failed: %w", err)
+		}
+		fmt.Println("Backup completed successfully!")
+	}
+
+	// Step 2: Always perform the data transfer (core functionality)
+	fmt.Println("Step 2: Transferring data to destination...")
+	if err := Transfer(dmm); err != nil {
+		return fmt.Errorf("data transfer failed: %w", err)
+	}
+	fmt.Println("Data transfer completed successfully!")
+
+	// Step 3: Check and perform restore if RestoreCmd is defined
+	if strings.TrimSpace(dmm.Destination.RestoreCmd) != "" {
+		fmt.Println("Step 3: Restoring data...")
+		if err := Restore(dmm); err != nil {
+			return fmt.Errorf("restore operation failed: %w", err)
+		}
+		fmt.Println("Restore completed successfully!")
+	}
+
 	return nil
 }
