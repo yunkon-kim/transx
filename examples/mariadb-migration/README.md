@@ -1,6 +1,6 @@
 # MariaDB Data Migration Example with transx
 
-This example demonstrates how to perform MariaDB database migration using the transx library.
+This example demonstrates how to perform MariaDB database migration using the transx library with the new unified endpoint structure.
 
 ## Overview
 
@@ -19,7 +19,14 @@ Supported migration modes:
    - Remote-to-local (remote source to local destination)
 
 2. **Relay Mode**: Two-step transfer where both source and destination are remote
-   - Source → Local Machine → Destination (local system acts as an intermediary)
+   - Source → Relay Node → Destination (relay node acts as an intermediary)
+
+## New Structure Features
+
+- **Unified Endpoint Configuration**: Single `endpoint` field for SSH hosts or HTTP URLs
+- **Separate Transfer Options**: Independent `sourceTransferOptions` and `destinationTransferOptions`
+- **Integrated SSH Authentication**: Username and SSH key path moved to `rsyncOptions`
+- **Transfer Method Auto-Detection**: Automatic detection of rsync vs HTTP transfer methods
 
 ## Prerequisites
 
@@ -29,7 +36,41 @@ Supported migration modes:
 
 ## Environment Setup
 
-1. Run the environment setup script to configure the test environment:
+### Local Testing Setup (Docker Containers)
+
+For local testing and development, you can set up MariaDB containers using the provided script:
+
+```bash
+# Setup both source and target containers with test data
+./setup_environment.sh all
+
+# Setup only source container
+./setup_environment.sh source
+
+# Setup only target container
+./setup_environment.sh target
+
+# Cleanup containers
+./setup_environment.sh cleanup
+```
+
+The script will create:
+
+- **Source MariaDB**: localhost:3306 (root password: `source_password`)
+- **Target MariaDB**: localhost:3307 (root password: `target_password`)
+- Test database `testdb` with sample `users` and `orders` tables
+- Backup directories: `~/mariadb_source_backup` and `~/mariadb_target_backup`
+
+### Production Environment Setup
+
+For production environments, ensure the following prerequisites are met:
+
+1. **rsync** is installed on both source and destination servers
+2. **SSH access** is configured between servers (for relay mode)
+3. **MariaDB/MySQL** client tools are available for backup/restore operations
+4. **Proper backup directories** exist on both servers
+
+5. Run the environment setup script to configure the test environment:
 
 ```bash
 chmod +x setup_environment.sh
@@ -96,7 +137,81 @@ Examples:
 
 ### Preparing JSON Configuration Files
 
-Choose one of the two available configuration templates based on your migration needs:
+Choose one of the configuration templates based on your migration needs:
+
+#### Local Testing Configuration Files
+
+For local testing with Docker containers, use these pre-configured files:
+
+**Direct Mode (`direct-mode-config.json`)**
+
+```json
+{
+  "source": {
+    "dataPath": "/home/ubuntu/mariadb_source_backup/testdb_backup.sql",
+    "backupCmd": "docker exec mariadb_source bash -c \"mariadb-dump -uroot -psource_password --ssl=0 --single-transaction --routines --triggers testdb > /backup/testdb_backup.sql\""
+  },
+  "destination": {
+    "endpoint": "localhost",
+    "dataPath": "/home/ubuntu/mariadb_target_backup/testdb_backup.sql",
+    "restoreCmd": "docker exec mariadb_target bash -c \"mariadb -uroot -ptarget_password --ssl=0 testdb < /backup/testdb_backup.sql\""
+  },
+  "destinationTransferOptions": {
+    "rsyncOptions": {
+      "username": "ubuntu",
+      "sshPrivateKeyPath": "/home/ubuntu/.ssh/id_rsa",
+      "connectTimeout": 10,
+      "insecureSkipHostKeyVerification": true
+    }
+  }
+}
+```
+
+**Relay Mode (`relay-mode-config.json`)**
+
+```json
+{
+  "source": {
+    "endpoint": "localhost",
+    "dataPath": "/home/ubuntu/mariadb_source_backup/testdb_backup.sql",
+    "backupCmd": "docker exec mariadb_source mariadb-dump -uroot -psource_password --ssl=0 --single-transaction --routines --triggers testdb --result-file=/backup/testdb_backup.sql"
+  },
+  "destination": {
+    "endpoint": "localhost",
+    "dataPath": "/home/ubuntu/mariadb_target_backup/testdb_backup.sql",
+    "restoreCmd": "docker exec mariadb_target mariadb -uroot -ptarget_password --ssl=0 testdb --execute=\"SOURCE /backup/testdb_backup.sql;\""
+  },
+  "sourceTransferOptions": {
+    "rsyncOptions": {
+      "username": "ubuntu",
+      "sshPrivateKeyPath": "/home/ubuntu/.ssh/id_rsa",
+      "connectTimeout": 10,
+      "insecureSkipHostKeyVerification": true
+    }
+  },
+  "destinationTransferOptions": {
+    "rsyncOptions": {
+      "username": "ubuntu",
+      "sshPrivateKeyPath": "/home/ubuntu/.ssh/id_rsa",
+      "connectTimeout": 10,
+      "insecureSkipHostKeyVerification": true
+    }
+  }
+}
+```
+
+To test these configurations:
+
+```bash
+# Build the migration tool
+go build -o mariadb-migration main.go
+
+# Test direct mode (local-to-remote)
+./mariadb-migration --config=direct-mode-config.json --verbose
+
+# Test relay mode
+./mariadb-migration --config=relay-mode-config.json --verbose
+```
 
 #### Direct Mode Configuration (direct-mode-config.json)
 
@@ -105,42 +220,76 @@ For local-to-local, local-to-remote, or remote-to-local migrations:
 ```json
 {
   "source": {
-    "username": "ubuntu",
-    "hostIP": "", // Leave empty for local source, or set to IP/hostname for remote
-    "sshPort": 22,
-    "path": "/path/to/backup", // Source backup directory path
-    "sshPrivateKey": "~/.ssh/id_rsa",
+    "endpoint": "", // Leave empty for local source, or set to hostname/IP for remote
+    "port": 0, // SSH port (0 uses default 22), ignored for local
+    "dataPath": "/path/to/backup", // Source backup directory path
     "backupCmd": "docker exec mariadb_source mariadb-dump -u root -p'password' database_name > /path/to/backup/dump.sql"
   },
   "destination": {
-    "username": "ubuntu",
-    "hostIP": "", // Leave empty for local destination, or set to IP/hostname for remote
-    "sshPort": 22,
-    "path": "/path/to/restore", // Destination restore directory path
-    "sshPrivateKey": "~/.ssh/id_rsa",
+    "endpoint": "remote-server.com", // Leave empty for local destination, or set to hostname/IP for remote
+    "port": 22, // SSH port for remote destination
+    "dataPath": "/path/to/restore", // Destination restore directory path
     "restoreCmd": "docker exec -i mariadb_target mariadb -u root -p'password' database_name < /path/to/restore/dump.sql"
   },
-  "rsyncOptions": {
-    "compress": true,
-    "archive": true,
-    "verbose": true,
-    "delete": false,
-    "progress": true,
-    "insecureSkipHostKeyVerification": false,
-    "exclude": ["*.tmp", "*.log"],
-    "extraArgs": ["--checksum", "--timeout=300"]
+  "destinationTransferOptions": {
+    // Only needed if destination is remote
+    "rsyncOptions": {
+      "username": "ubuntu",
+      "sshPrivateKeyPath": "~/.ssh/id_rsa",
+      "compress": true,
+      "archive": true,
+      "verbose": true,
+      "delete": false,
+      "progress": true,
+      "insecureSkipHostKeyVerification": false,
+      "connectTimeout": 30,
+      "exclude": ["*.tmp", "*.log"]
+    }
   }
 }
 ```
 
-#### Remote Migration Configuration (remote-migration-config.json)
+#### Relay Mode Configuration (relay-mode-config.json)
+
+For relay migrations where both source and destination are remote:
 
 ```json
 {
   "source": {
-    "username": "ubuntu",
-    "hostIP": "",
-    "sshPort": 22,
+    "endpoint": "source-server.com",
+    "port": 22,
+    "dataPath": "/var/lib/mysql/backup",
+    "backupCmd": "sudo mysqldump -u root -p'password' --all-databases > /var/lib/mysql/backup/dump.sql"
+  },
+  "destination": {
+    "endpoint": "destination-server.com",
+    "port": 22,
+    "dataPath": "/home/user/mariadb_backup",
+    "restoreCmd": "sudo mysql -u root -p'password' < /home/user/mariadb_backup/dump.sql"
+  },
+  "sourceTransferOptions": {
+    "rsyncOptions": {
+      "username": "source_user",
+      "sshPrivateKeyPath": "~/.ssh/source_key",
+      "compress": true,
+      "archive": true,
+      "verbose": true,
+      "insecureSkipHostKeyVerification": false,
+      "connectTimeout": 30
+    }
+  },
+  "destinationTransferOptions": {
+    "rsyncOptions": {
+      "username": "dest_user",
+      "sshPrivateKeyPath": "~/.ssh/dest_key",
+      "compress": true,
+      "archive": true,
+      "verbose": true,
+      "insecureSkipHostKeyVerification": false,
+      "connectTimeout": 30
+    }
+  }
+}
     "path": "/home/ubuntu/mariadb_dump",
     "sshPrivateKey": "~/.ssh/id_rsa",
     "backupCmd": "docker exec mariadb_source mariadb-dump -u root -p'your_root_password' poc_db > /home/ubuntu/mariadb_dump/poc_db_dump.sql"
