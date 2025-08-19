@@ -17,10 +17,16 @@ import (
 func main() {
 	var configFile string
 	var verbose bool
+	var backupOnly bool
+	var transferOnly bool
+	var restoreOnly bool
 
 	// Setting up command-line flags
 	flag.StringVar(&configFile, "config", "direct-mode-config.json", "Migration configuration JSON file path")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
+	flag.BoolVar(&backupOnly, "backup", false, "Run only the backup step")
+	flag.BoolVar(&transferOnly, "transfer", false, "Run only the transfer step")
+	flag.BoolVar(&restoreOnly, "restore", false, "Run only the restore step")
 	flag.Parse()
 
 	// Record start time (for performance measurement)
@@ -60,29 +66,43 @@ func main() {
 	if isRelayMode {
 		fmt.Println("Relay mode detected: Source and destination are both remote.")
 		fmt.Println("This machine will act as an intermediary relay for the data transfer.")
-		fmt.Printf("Source: %s@%s:%s\n", dmm.Source.Username, dmm.Source.HostIP, dmm.Source.DataPath)
-		fmt.Printf("Destination: %s@%s:%s\n", dmm.Destination.Username, dmm.Destination.HostIP, dmm.Destination.DataPath)
+
+		// Get usernames from transfer options
+		var sourceUsername, destUsername string
+		if dmm.SourceTransferOptions != nil && dmm.SourceTransferOptions.RsyncOptions != nil {
+			sourceUsername = dmm.SourceTransferOptions.RsyncOptions.Username
+		}
+		if dmm.DestinationTransferOptions != nil && dmm.DestinationTransferOptions.RsyncOptions != nil {
+			destUsername = dmm.DestinationTransferOptions.RsyncOptions.Username
+		}
+
+		fmt.Printf("Source: %s@%s:%s\n", sourceUsername, dmm.Source.GetHost(), dmm.Source.DataPath)
+		fmt.Printf("Destination: %s@%s:%s\n", destUsername, dmm.Destination.GetHost(), dmm.Destination.DataPath)
 	} else {
 		fmt.Println("Direct mode detected.")
 
 		// Check if it's entirely local or involves remote endpoints
-		if dmm.Source.HostIP == "" && dmm.Destination.HostIP == "" {
+		if dmm.Source.GetHost() == "" && dmm.Destination.GetHost() == "" {
 			fmt.Println("Local-to-local migration (both source and destination are on this machine).")
-		} else if dmm.Source.HostIP == "" && dmm.Destination.HostIP != "" {
+		} else if dmm.Source.GetHost() == "" && dmm.Destination.GetHost() != "" {
 			fmt.Println("Local-to-remote migration (source is on this machine).")
-		} else if dmm.Source.HostIP != "" && dmm.Destination.HostIP == "" {
+		} else if dmm.Source.GetHost() != "" && dmm.Destination.GetHost() == "" {
 			fmt.Println("Remote-to-local migration (destination is on this machine).")
 		}
 	}
 
 	// Expand tilde (~) in SSH private key paths
-	if strings.HasPrefix(dmm.Source.SSHPrivateKeyPath, "~/") {
-		homeDir, _ := os.UserHomeDir()
-		dmm.Source.SSHPrivateKeyPath = filepath.Join(homeDir, dmm.Source.SSHPrivateKeyPath[2:])
+	if dmm.SourceTransferOptions != nil && dmm.SourceTransferOptions.RsyncOptions != nil {
+		if strings.HasPrefix(dmm.SourceTransferOptions.RsyncOptions.SSHPrivateKeyPath, "~/") {
+			homeDir, _ := os.UserHomeDir()
+			dmm.SourceTransferOptions.RsyncOptions.SSHPrivateKeyPath = filepath.Join(homeDir, dmm.SourceTransferOptions.RsyncOptions.SSHPrivateKeyPath[2:])
+		}
 	}
-	if strings.HasPrefix(dmm.Destination.SSHPrivateKeyPath, "~/") {
-		homeDir, _ := os.UserHomeDir()
-		dmm.Destination.SSHPrivateKeyPath = filepath.Join(homeDir, dmm.Destination.SSHPrivateKeyPath[2:])
+	if dmm.DestinationTransferOptions != nil && dmm.DestinationTransferOptions.RsyncOptions != nil {
+		if strings.HasPrefix(dmm.DestinationTransferOptions.RsyncOptions.SSHPrivateKeyPath, "~/") {
+			homeDir, _ := os.UserHomeDir()
+			dmm.DestinationTransferOptions.RsyncOptions.SSHPrivateKeyPath = filepath.Join(homeDir, dmm.DestinationTransferOptions.RsyncOptions.SSHPrivateKeyPath[2:])
+		}
 	}
 
 	// Display commands (in verbose mode)
@@ -102,16 +122,47 @@ func main() {
 		}
 	}
 
-	// Execute the complete data migration workflow
-	if err := transx.MigrateData(dmm); err != nil {
-		log.Fatalf("Migration failed: %v", err)
+	// Execute individual steps if specified, otherwise run complete migration
+	if backupOnly {
+		fmt.Println("Running backup step only...")
+		if err := transx.Backup(dmm); err != nil {
+			log.Fatalf("Backup failed: %v", err)
+		}
+		fmt.Println("Backup completed successfully!")
+	} else if transferOnly {
+		fmt.Println("Running transfer step only...")
+		if err := transx.Transfer(dmm); err != nil {
+			log.Fatalf("Transfer failed: %v", err)
+		}
+		fmt.Println("Transfer completed successfully!")
+	} else if restoreOnly {
+		fmt.Println("Running restore step only...")
+		if err := transx.Restore(dmm); err != nil {
+			log.Fatalf("Restore failed: %v", err)
+		}
+		fmt.Println("Restore completed successfully!")
+	} else {
+		// Execute the complete data migration workflow
+		if err := transx.MigrateData(dmm); err != nil {
+			log.Fatalf("Migration failed: %v", err)
+		}
 	}
 
 	// Display summary information
 	totalTime := time.Since(startTime)
 	fmt.Println("\n=== Migration Summary ===")
-	fmt.Printf("Source: %s@%s:%s\n", dmm.Source.Username, dmm.Source.HostIP, dmm.Source.DataPath)
-	fmt.Printf("Destination: %s@%s:%s\n", dmm.Destination.Username, dmm.Destination.HostIP, dmm.Destination.DataPath)
+
+	// Get usernames from transfer options for summary
+	var sourceUsername, destUsername string
+	if dmm.SourceTransferOptions != nil && dmm.SourceTransferOptions.RsyncOptions != nil {
+		sourceUsername = dmm.SourceTransferOptions.RsyncOptions.Username
+	}
+	if dmm.DestinationTransferOptions != nil && dmm.DestinationTransferOptions.RsyncOptions != nil {
+		destUsername = dmm.DestinationTransferOptions.RsyncOptions.Username
+	}
+
+	fmt.Printf("Source: %s@%s:%s\n", sourceUsername, dmm.Source.GetHost(), dmm.Source.DataPath)
+	fmt.Printf("Destination: %s@%s:%s\n", destUsername, dmm.Destination.GetHost(), dmm.Destination.DataPath)
 	fmt.Printf("Total migration time: %s\n", totalTime)
 	fmt.Println("MariaDB migration completed successfully!")
 }
