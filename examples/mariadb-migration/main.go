@@ -76,17 +76,17 @@ func main() {
 			destUsername = dmm.DestinationTransferOptions.RsyncOptions.Username
 		}
 
-		fmt.Printf("Source: %s@%s:%s\n", sourceUsername, dmm.Source.GetHost(), dmm.Source.DataPath)
-		fmt.Printf("Destination: %s@%s:%s\n", destUsername, dmm.Destination.GetHost(), dmm.Destination.DataPath)
+		fmt.Printf("Source: %s@%s:%s\n", sourceUsername, dmm.Source.GetEndpoint(), dmm.Source.DataPath)
+		fmt.Printf("Destination: %s@%s:%s\n", destUsername, dmm.Destination.GetEndpoint(), dmm.Destination.DataPath)
 	} else {
 		fmt.Println("Direct mode detected.")
 
 		// Check if it's entirely local or involves remote endpoints
-		if dmm.Source.GetHost() == "" && dmm.Destination.GetHost() == "" {
+		if dmm.Source.GetEndpoint() == "" && dmm.Destination.GetEndpoint() == "" {
 			fmt.Println("Local-to-local migration (both source and destination are on this machine).")
-		} else if dmm.Source.GetHost() == "" && dmm.Destination.GetHost() != "" {
+		} else if dmm.Source.GetEndpoint() == "" && dmm.Destination.GetEndpoint() != "" {
 			fmt.Println("Local-to-remote migration (source is on this machine).")
-		} else if dmm.Source.GetHost() != "" && dmm.Destination.GetHost() == "" {
+		} else if dmm.Source.GetEndpoint() != "" && dmm.Destination.GetEndpoint() == "" {
 			fmt.Println("Remote-to-local migration (destination is on this machine).")
 		}
 	}
@@ -161,8 +161,8 @@ func main() {
 		destUsername = dmm.DestinationTransferOptions.RsyncOptions.Username
 	}
 
-	fmt.Printf("Source: %s@%s:%s\n", sourceUsername, dmm.Source.GetHost(), dmm.Source.DataPath)
-	fmt.Printf("Destination: %s@%s:%s\n", destUsername, dmm.Destination.GetHost(), dmm.Destination.DataPath)
+	fmt.Printf("Source: %s@%s:%s\n", sourceUsername, dmm.Source.GetEndpoint(), dmm.Source.DataPath)
+	fmt.Printf("Destination: %s@%s:%s\n", destUsername, dmm.Destination.GetEndpoint(), dmm.Destination.DataPath)
 	fmt.Printf("Total migration time: %s\n", totalTime)
 	fmt.Println("MariaDB migration completed successfully!")
 }
