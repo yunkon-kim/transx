@@ -5,7 +5,7 @@
   },
   "destination": {
     "endpoint": "http://localhost:1024/spider/s3",
-    "dataPath": "my-bucket-for-transx/backup/data.sql"
+    "dataPath": "my-bucket-for-transx/data.sql"
   },
   "destinationTransferOptions": {
     "method": "object-storage-api",
