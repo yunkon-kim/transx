@@ -5,7 +5,28 @@ import (
 	"strings"
 )
 
+// Transfer runs the transfer command to transfer data as defined by the given DataMigrationModel.
+// * Note: This is the core operation that always executes when called.
+func Transfer(dmm DataMigrationModel) error {
+	if err := Validate(dmm); err != nil {
+		return fmt.Errorf("data migration model validation failed: %w", err)
+	}
+
+	// Check if we're operating in relay mode (both source and destination are remote)
+	isRelayMode := dmm.IsRelayMode()
+
+	// Handle different transfer scenarios
+	if !isRelayMode {
+		// Direct mode: at least one endpoint is local
+		return performDirectTransfer(dmm)
+	} else {
+		// Relay mode: both endpoints are remote
+		return performRelayTransfer(dmm)
+	}
+}
+
 // Backup executes the BackupCmd defined in the source EndpointDetails of the DataMigrationModel.
+// * Note: This is an optional operation that runs only if BackupCmd is configured.
 func Backup(dmm DataMigrationModel) error {
 	// Use source endpoint for backup operations
 	source := dmm.Source
@@ -32,12 +53,13 @@ func Backup(dmm DataMigrationModel) error {
 			}
 		}
 
-		// Return detailed error with context
-		return &BackupError{
-			Source: sourcePath,
-			Cmd:    source.BackupCmd,
-			Output: string(output),
-			Err:    err,
+		// Use inline error creation
+		return &OperationError{
+			Operation: "backup",
+			Source:    sourcePath,
+			Command:   source.BackupCmd,
+			Output:    string(output),
+			Err:       fmt.Errorf("command execution failed: %w", err),
 		}
 	}
 
@@ -45,6 +67,7 @@ func Backup(dmm DataMigrationModel) error {
 }
 
 // Restore executes the RestoreCmd defined in the destination EndpointDetails of the DataMigrationModel.
+// * Note: This is an optional operation that runs only if RestoreCmd is configured.
 func Restore(dmm DataMigrationModel) error {
 	// Use destination endpoint for restore operations
 	destination := dmm.Destination
@@ -71,35 +94,17 @@ func Restore(dmm DataMigrationModel) error {
 			}
 		}
 
-		// Return detailed error with context
-		return &RestoreError{
+		// Use inline error creation
+		return &OperationError{
+			Operation:   "restore",
 			Destination: destinationPath,
-			Cmd:         destination.RestoreCmd,
+			Command:     destination.RestoreCmd,
 			Output:      string(output),
-			Err:         err,
+			Err:         fmt.Errorf("command execution failed: %w", err),
 		}
 	}
 
 	return nil
-}
-
-// Transfer runs the transfer command to transfer data as defined by the given DataMigrationModel.
-func Transfer(dmm DataMigrationModel) error {
-	if err := Validate(dmm); err != nil {
-		return fmt.Errorf("data migration model validation failed: %w", err)
-	}
-
-	// Check if we're operating in relay mode (both source and destination are remote)
-	isRelayMode := dmm.IsRelayMode()
-
-	// Handle different transfer scenarios
-	if !isRelayMode {
-		// Direct mode: at least one endpoint is local
-		return performDirectTransfer(dmm)
-	} else {
-		// Relay mode: both endpoints are remote
-		return performRelayTransfer(dmm)
-	}
 }
 
 // MigrateData manages the complete data migration workflow:
@@ -107,13 +112,14 @@ func Transfer(dmm DataMigrationModel) error {
 // 2. Always perform Transfer
 // 3. If Destination.RestoreCmd is available, perform Restore
 // This provides a simple one-call approach to handle the entire data migration pipeline.
+// * Note: Transfer is the optional operation that runs BackUp, Transfer, and Restore sequentially.
 func MigrateData(dmm DataMigrationModel) error {
 	// Step 1: Check and perform backup if BackupCmd is defined
 	if strings.TrimSpace(dmm.Source.BackupCmd) != "" {
 		if err := Backup(dmm); err != nil {
 			return &MigrationError{
 				Stage: "backup",
-				Err:   err,
+				Err:   fmt.Errorf("backup operation failed: %w", err),
 			}
 		}
 	}
@@ -122,7 +128,7 @@ func MigrateData(dmm DataMigrationModel) error {
 	if err := Transfer(dmm); err != nil {
 		return &MigrationError{
 			Stage: "transfer",
-			Err:   err,
+			Err:   fmt.Errorf("data transfer failed: %w", err),
 		}
 	}
 
@@ -131,7 +137,7 @@ func MigrateData(dmm DataMigrationModel) error {
 		if err := Restore(dmm); err != nil {
 			return &MigrationError{
 				Stage: "restore",
-				Err:   err,
+				Err:   fmt.Errorf("restore operation failed: %w", err),
 			}
 		}
 	}
