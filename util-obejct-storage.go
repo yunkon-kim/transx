@@ -198,16 +198,24 @@ func generatePresignedURL(apiEndpoint, operation, objectPath string, options *Ob
 	presignedAPIURL := fmt.Sprintf("%s/presigned/%s/%s", apiEndpoint, operation, objectPath)
 
 	// Add query parameters
-	params := fmt.Sprintf("ConnectionName=%s", options.AccessKeyId)
+	params := ""
 	if options.ExpiresIn > 0 {
-		params += fmt.Sprintf("&expires=%d", options.ExpiresIn)
+		params += fmt.Sprintf("expires=%d", options.ExpiresIn)
 	} else {
-		params += "&expires=3600" // Default 1 hour
+		params += "expires=3600" // Default 1 hour
 	}
 
 	presignedAPIURL += "?" + params
 
 	// Make HTTP GET request to Object Storage API to get the actual presigned URL
+	req, err := http.NewRequest("GET", presignedAPIURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create presigned URL request: %w", err)
+	}
+
+	// Add Authorization header
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential="+options.AccessKeyId)
+
 	client := &http.Client{
 		Timeout: time.Duration(options.Timeout) * time.Second,
 	}
@@ -215,7 +223,7 @@ func generatePresignedURL(apiEndpoint, operation, objectPath string, options *Ob
 		client.Timeout = 300 * time.Second // 5 minutes default
 	}
 
-	resp, err := client.Get(presignedAPIURL)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to request presigned URL from Object Storage API: %w", err)
 	}
@@ -286,7 +294,7 @@ func checkBucketExists(endpoint EndpointDetails, options *ObjectStorageTransferO
 
 	// Build bucket check URL
 	// Format: HEAD /spider/s3/{bucket-name}?ConnectionName={conn}
-	bucketCheckURL := fmt.Sprintf("%s/%s?ConnectionName=%s", apiBase, bucket, options.AccessKeyId)
+	bucketCheckURL := fmt.Sprintf("%s/%s", apiBase, bucket)
 
 	// Create HTTP client
 	client := &http.Client{
@@ -301,6 +309,9 @@ func checkBucketExists(endpoint EndpointDetails, options *ObjectStorageTransferO
 	if err != nil {
 		return fmt.Errorf("failed to create bucket check request: %w", err)
 	}
+
+	// Add Authorization header
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential="+options.AccessKeyId)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -339,10 +350,10 @@ func listBucketObjects(endpoint EndpointDetails, prefix string, options *ObjectS
 	}
 
 	// Build bucket listing URL
-	// Format: GET /spider/s3/{bucket-name}?ConnectionName={conn}&prefix={prefix}
-	listURL := fmt.Sprintf("%s/%s?ConnectionName=%s", apiBase, bucket, options.AccessKeyId)
+	// Format: GET /spider/s3/{bucket-name}?prefix={prefix}
+	listURL := fmt.Sprintf("%s/%s", apiBase, bucket)
 	if prefix != "" {
-		listURL += "&prefix=" + prefix
+		listURL += "?prefix=" + prefix
 	}
 
 	// Create HTTP client
@@ -354,7 +365,15 @@ func listBucketObjects(endpoint EndpointDetails, prefix string, options *ObjectS
 	}
 
 	// Make GET request to list objects
-	resp, err := client.Get(listURL)
+	req, err := http.NewRequest("GET", listURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bucket listing request: %w", err)
+	}
+
+	// Add Authorization header
+	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential="+options.AccessKeyId)
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list bucket objects: %w", err)
 	}
@@ -379,5 +398,3 @@ func listBucketObjects(endpoint EndpointDetails, prefix string, options *ObjectS
 
 	return bucketInfo.Contents, nil
 }
-
-// parseObjectListXML parses the XML response from bucket listing
