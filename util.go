@@ -36,12 +36,13 @@ func performDirectTransfer(dmm DataMigrationModel) error {
 	case TransferMethodRsync:
 		// Use rsync for transfer
 		if err := performRsyncTransfer(dmm); err != nil {
-			// If it's already a TransferError, return as is
-			if _, ok := err.(*TransferError); ok {
+			// If it's already an OperationError, return as is
+			if _, ok := err.(*OperationError); ok {
 				return err
 			}
-			// Otherwise, wrap in TransferError
-			return &TransferError{
+			// Otherwise, wrap in OperationError
+			return &OperationError{
+				Operation:   "transfer",
 				Method:      transferMethod,
 				Source:      dmm.Source.DataPath,
 				Destination: dmm.Destination.DataPath,
@@ -54,12 +55,13 @@ func performDirectTransfer(dmm DataMigrationModel) error {
 	case TransferMethodObjectStorageAPI:
 		// Use Object Storage API for transfer
 		if err := performObjectStorageTransfer(dmm); err != nil {
-			// If it's already a TransferError, return as is
-			if _, ok := err.(*TransferError); ok {
+			// If it's already an OperationError, return as is
+			if _, ok := err.(*OperationError); ok {
 				return err
 			}
-			// Otherwise, wrap in TransferError
-			return &TransferError{
+			// Otherwise, wrap in OperationError
+			return &OperationError{
+				Operation:   "transfer",
 				Method:      transferMethod,
 				Source:      dmm.Source.DataPath,
 				Destination: dmm.Destination.DataPath,
@@ -70,7 +72,8 @@ func performDirectTransfer(dmm DataMigrationModel) error {
 		return nil
 
 	default:
-		return &TransferError{
+		return &OperationError{
+			Operation:   "transfer",
 			Method:      transferMethod,
 			Source:      dmm.Source.DataPath,
 			Destination: dmm.Destination.DataPath,
@@ -86,7 +89,8 @@ func performRelayTransfer(dmm DataMigrationModel) error {
 	// Create temporary directory for relay
 	tempDir, err := os.MkdirTemp("", "transx-relay-*")
 	if err != nil {
-		return &TransferError{
+		return &OperationError{
+			Operation:   "transfer",
 			Method:      "relay",
 			Source:      dmm.Source.DataPath,
 			Destination: dmm.Destination.DataPath,
@@ -101,7 +105,8 @@ func performRelayTransfer(dmm DataMigrationModel) error {
 	tempDmm.Destination = EndpointDetails{DataPath: tempDir}
 
 	if err := performDirectTransfer(tempDmm); err != nil {
-		return &TransferError{
+		return &OperationError{
+			Operation:   "transfer",
 			Method:      "relay",
 			Source:      dmm.Source.DataPath,
 			Destination: dmm.Destination.DataPath,
@@ -115,7 +120,8 @@ func performRelayTransfer(dmm DataMigrationModel) error {
 	tempDmm.Source = EndpointDetails{DataPath: tempDir}
 
 	if err := performDirectTransfer(tempDmm); err != nil {
-		return &TransferError{
+		return &OperationError{
+			Operation:   "transfer",
 			Method:      "relay",
 			Source:      dmm.Source.DataPath,
 			Destination: dmm.Destination.DataPath,
@@ -303,7 +309,8 @@ func performRsyncTransfer(dmm DataMigrationModel) error {
 	// Capture output for error reporting
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return &TransferError{
+		return &OperationError{
+			Operation:   "transfer",
 			Method:      TransferMethodRsync,
 			Source:      sourceRsyncPath,
 			Destination: destinationRsyncPath,
