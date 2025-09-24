@@ -8,7 +8,7 @@ The `transx` library supports Object Storage migration through CB-Spider presign
 
 ## Features
 
-- **Direct Mode**: Object Storage → Local filesystem
+- **Direct Mode**: Bidirectional transfers (Local ↔ Object Storage)
 - **Relay Mode**: Object Storage → Object Storage (via intermediate storage)
 - **CB-Spider Integration**: Uses CB-Spider's presigned URL API for secure transfers
 - **Step-by-step Execution**: Supports individual backup, transfer, and restore steps
@@ -49,7 +49,14 @@ Downloads data from Object Storage to local filesystem:
     }
   },
   "destinationTransferOptions": {
-    "method": "local"
+    "method": "object-storage-api",
+    "objectStorageTransferOptions": {
+      "accessKeyId": "conn-kimy-aws",
+      "expiresIn": 3600,
+      "timeout": 300,
+      "maxRetries": 3,
+      "verifySSL": false
+    }
   }
 }
 ```
@@ -70,7 +77,14 @@ Uploads local files to Object Storage:
     "dataPath": "spider-test-bucket/uploads/backup.sql"
   },
   "sourceTransferOptions": {
-    "method": "local"
+    "method": "object-storage-api",
+    "objectStorageTransferOptions": {
+      "accessKeyId": "conn-kimy-aws",
+      "expiresIn": 3600,
+      "timeout": 300,
+      "maxRetries": 3,
+      "verifySSL": false
+    }
   },
   "destinationTransferOptions": {
     "method": "object-storage-api",
@@ -293,15 +307,15 @@ For AWS S3 through CB-Spider:
 
 ### Direct Mode
 
-- **Source**: Object Storage (via CB-Spider presigned URL)
-- **Destination**: Local filesystem
-- **Use Case**: Downloading backups, data export
+- **Upload (Local → Object Storage)**: Local filesystem to Object Storage
+- **Download (Object Storage → Local)**: Object Storage to local filesystem
+- **Use Case**: File uploads, downloading backups, data export/import
 
 ### Relay Mode
 
 - **Source**: Object Storage (via CB-Spider presigned URL)
 - **Destination**: Object Storage (via CB-Spider presigned URL)
-- **Use Case**: Cross-cloud migration, backup replication
+- **Use Case**: Cross-cloud migration, backup replication between different Object Storage providers
 
 ## Features and Capabilities
 

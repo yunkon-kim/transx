@@ -1,11 +1,15 @@
 # transx
 
-A Go-based data migration library that supports multiple transfer methods for moving data between databases and storage systems.
+A Go-ba# Configure transfer options
+options := transx.TransferOptions{
+Method: "rsync", // or "object-storage-api"
+// ... other configuration
+}ata migration library that supports multiple transfer methods for moving data between databases and storage systems.
 
 ## Features
 
 - **ETL Pattern**: Extract, Transfer, Load architecture for reliable data migration
-- **Multiple Transfer Methods**: Support for `local`, `rsync`, and `http` transfers
+- **Multiple Transfer Methods**: Support for `rsync` and `object-storage-api` transfers
 - **Explicit Configuration**: User-specified transfer methods (no auto-detection)
 - **Direct & Relay Modes**: Flexible migration patterns
 - **Data Integrity**: Built-in validation and verification
@@ -17,7 +21,7 @@ import "github.com/yunkon-kim/transx"
 
 // Configure transfer options
 options := transx.TransferOptions{
-    Method: "rsync", // or "local", "http"
+    Method: "rsync", // or "object-storage-api"
     // ... other configuration
 }
 
@@ -27,11 +31,12 @@ err := transx.Migrate(sourceConfig, destConfig, options)
 
 ## Transfer Methods
 
-| Method | Description | Use Case |
-|--------|-------------|----------|
-| `local` | Direct local file operations | Same-machine migrations |
-| `rsync` | SSH-based file transfers | Remote server migrations |
-| `http` | HTTP-based transfers | Object storage (S3-compatible) |
+| Method               | Description                                   | Use Case                                        |
+| -------------------- | --------------------------------------------- | ----------------------------------------------- |
+| `rsync`              | SSH-based file transfers using rsync          | Remote server migrations                        |
+| `object-storage-api` | HTTP-based transfers with Object Storage APIs | S3-compatible storage (CB-Spider, AWS S3, etc.) |
+
+Note: Direct local file operations are handled automatically based on endpoint configuration (empty endpoint = local).
 
 ## Architecture
 
@@ -44,6 +49,7 @@ The library follows the **DataMigrationModel** using ETL pattern:
 ## Examples
 
 See [examples/mariadb-migration](examples/mariadb-migration/) for a complete MariaDB migration example with:
+
 - Direct mode migration
 - Relay mode migration
 - Individual step execution

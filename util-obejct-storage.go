@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -231,9 +232,25 @@ func generatePresignedURL(apiEndpoint, operation, objectPath string, options *Ob
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	// Fix XML parsing issue: CB-Spider returns unescaped & characters in URLs
+	// Replace unescaped & with &amp; for proper XML parsing
+	bodyString := string(bodyBytes)
+
+	// This handles CB-Spider's improper XML encoding of query parameters in presigned URLs
+	// Simple approach: replace all & with &amp; first, then fix double-escaping
+	bodyString = strings.ReplaceAll(bodyString, "&", "&amp;")
+	// Fix double-escaping of common XML entities
+	bodyString = strings.ReplaceAll(bodyString, "&amp;amp;", "&amp;")
+	bodyString = strings.ReplaceAll(bodyString, "&amp;lt;", "&lt;")
+	bodyString = strings.ReplaceAll(bodyString, "&amp;gt;", "&gt;")
+	bodyString = strings.ReplaceAll(bodyString, "&amp;quot;", "&quot;")
+	bodyString = strings.ReplaceAll(bodyString, "&amp;apos;", "&apos;")
+
+	fixedBodyBytes := []byte(bodyString)
+
 	// Parse XML response using struct
 	var presignedInfo PresignedUrlInfo
-	if err := xml.Unmarshal(bodyBytes, &presignedInfo); err != nil {
+	if err := xml.Unmarshal(fixedBodyBytes, &presignedInfo); err != nil {
 		return "", fmt.Errorf("failed to parse presigned URL XML response: %w", err)
 	}
 

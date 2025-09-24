@@ -10,7 +10,7 @@
   "destinationTransferOptions": {
     "method": "object-storage-api",
     "objectStorageTransferOptions": {
-      "accessKeyId": "conn-kimy-aws",
+      "accessKeyId": "aws-ap-northeast-2",
       "expiresIn": 3600,
       "timeout": 300,
       "maxRetries": 3,

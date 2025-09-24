@@ -35,14 +35,48 @@ func performDirectTransfer(dmm DataMigrationModel) error {
 	switch transferMethod {
 	case TransferMethodRsync:
 		// Use rsync for transfer
-		return performRsyncTransfer(dmm)
+		if err := performRsyncTransfer(dmm); err != nil {
+			// If it's already a TransferError, return as is
+			if _, ok := err.(*TransferError); ok {
+				return err
+			}
+			// Otherwise, wrap in TransferError
+			return &TransferError{
+				Method:      transferMethod,
+				Source:      dmm.Source.DataPath,
+				Destination: dmm.Destination.DataPath,
+				IsRelayMode: false,
+				Err:         err,
+			}
+		}
+		return nil
 
 	case TransferMethodObjectStorageAPI:
 		// Use Object Storage API for transfer
-		return performObjectStorageTransfer(dmm)
+		if err := performObjectStorageTransfer(dmm); err != nil {
+			// If it's already a TransferError, return as is
+			if _, ok := err.(*TransferError); ok {
+				return err
+			}
+			// Otherwise, wrap in TransferError
+			return &TransferError{
+				Method:      transferMethod,
+				Source:      dmm.Source.DataPath,
+				Destination: dmm.Destination.DataPath,
+				IsRelayMode: false,
+				Err:         err,
+			}
+		}
+		return nil
 
 	default:
-		return fmt.Errorf("unsupported direct transfer method: %s", transferMethod)
+		return &TransferError{
+			Method:      transferMethod,
+			Source:      dmm.Source.DataPath,
+			Destination: dmm.Destination.DataPath,
+			IsRelayMode: false,
+			Err:         fmt.Errorf("unsupported direct transfer method: %s", transferMethod),
+		}
 	}
 }
 
@@ -52,7 +86,13 @@ func performRelayTransfer(dmm DataMigrationModel) error {
 	// Create temporary directory for relay
 	tempDir, err := os.MkdirTemp("", "transx-relay-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
+		return &TransferError{
+			Method:      "relay",
+			Source:      dmm.Source.DataPath,
+			Destination: dmm.Destination.DataPath,
+			IsRelayMode: true,
+			Err:         fmt.Errorf("failed to create temporary directory: %w", err),
+		}
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -61,7 +101,13 @@ func performRelayTransfer(dmm DataMigrationModel) error {
 	tempDmm.Destination = EndpointDetails{DataPath: tempDir}
 
 	if err := performDirectTransfer(tempDmm); err != nil {
-		return fmt.Errorf("relay step 1 (source → relay node) failed: %w", err)
+		return &TransferError{
+			Method:      "relay",
+			Source:      dmm.Source.DataPath,
+			Destination: dmm.Destination.DataPath,
+			IsRelayMode: true,
+			Err:         fmt.Errorf("relay step 1 (source → relay node) failed: %w", err),
+		}
 	}
 
 	// Step 2: Upload from local temp to destination
@@ -69,7 +115,13 @@ func performRelayTransfer(dmm DataMigrationModel) error {
 	tempDmm.Source = EndpointDetails{DataPath: tempDir}
 
 	if err := performDirectTransfer(tempDmm); err != nil {
-		return fmt.Errorf("relay step 2 (relay node → destination) failed: %w", err)
+		return &TransferError{
+			Method:      "relay",
+			Source:      dmm.Source.DataPath,
+			Destination: dmm.Destination.DataPath,
+			IsRelayMode: true,
+			Err:         fmt.Errorf("relay step 2 (relay node → destination) failed: %w", err),
+		}
 	}
 
 	return nil
@@ -246,15 +298,21 @@ func performRsyncTransfer(dmm DataMigrationModel) error {
 	args = append(args, sourceRsyncPath, destinationRsyncPath)
 
 	// Execute rsync command
-	if sourceOptions != nil && sourceOptions.RsyncOptions != nil && sourceOptions.RsyncOptions.Verbose {
-		fmt.Printf("Executing: %s %s\n", rsyncCmdPath, strings.Join(args, " "))
+	cmd := exec.Command(rsyncCmdPath, args...)
+
+	// Capture output for error reporting
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return &TransferError{
+			Method:      TransferMethodRsync,
+			Source:      sourceRsyncPath,
+			Destination: destinationRsyncPath,
+			IsRelayMode: false, // Direct transfer
+			Err:         fmt.Errorf("%w (command: %s %s)\nOutput: %s", err, rsyncCmdPath, strings.Join(args, " "), string(output)),
+		}
 	}
 
-	cmd := exec.Command(rsyncCmdPath, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
+	return nil
 }
 
 /*

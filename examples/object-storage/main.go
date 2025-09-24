@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/yunkon-kim/transx"
@@ -104,14 +105,19 @@ func executeMigrationSteps(task transx.DataMigrationModel, backupOnly, transferO
 
 	// Execute individual steps based on user selection
 	if runBackup {
-		if verbose {
-			fmt.Println("📦 Starting backup step...")
-		}
-		if err := transx.Backup(task); err != nil {
-			return fmt.Errorf("backup failed: %w", err)
-		}
-		if verbose {
-			fmt.Println("✅ Backup completed successfully")
+		// Only run backup if BackupCmd is defined
+		if strings.TrimSpace(task.Source.BackupCmd) != "" {
+			if verbose {
+				fmt.Println("📦 Starting backup step...")
+			}
+			if err := transx.Backup(task); err != nil {
+				return fmt.Errorf("backup failed: %w", err)
+			}
+			if verbose {
+				fmt.Println("✅ Backup completed successfully")
+			}
+		} else if verbose {
+			fmt.Println("⏭️ Skipping backup step (no backup command defined)")
 		}
 	}
 
@@ -128,14 +134,19 @@ func executeMigrationSteps(task transx.DataMigrationModel, backupOnly, transferO
 	}
 
 	if runRestore {
-		if verbose {
-			fmt.Println("🔧 Starting restore step...")
-		}
-		if err := transx.Restore(task); err != nil {
-			return fmt.Errorf("restore failed: %w", err)
-		}
-		if verbose {
-			fmt.Println("✅ Restore completed successfully")
+		// Only run restore if RestoreCmd is defined
+		if strings.TrimSpace(task.Destination.RestoreCmd) != "" {
+			if verbose {
+				fmt.Println("🔧 Starting restore step...")
+			}
+			if err := transx.Restore(task); err != nil {
+				return fmt.Errorf("restore failed: %w", err)
+			}
+			if verbose {
+				fmt.Println("✅ Restore completed successfully")
+			}
+		} else if verbose {
+			fmt.Println("⏭️ Skipping restore step (no restore command defined)")
 		}
 	}
 
