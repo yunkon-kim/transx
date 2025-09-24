@@ -38,7 +38,7 @@ The `transx` package implements a generalized **DataMigrationModel** based on th
 
 2. **Transfer**: Move extracted data between systems using specified transfer methods
 
-   - Method-agnostic transfer (local, rsync, http, etc.)
+   - Method-agnostic transfer (rsync, object-storage-api, etc.)
    - Support for both direct and relay modes
    - Configurable transfer protocols and authentication
 
@@ -68,9 +68,10 @@ The **DataMigrationModel** abstracts the migration process to support various da
 
 The library supports multiple transfer methods that must be explicitly specified by users. Currently supported methods include:
 
-- `local`: Direct local file operations
 - `rsync`: SSH-based file transfers using rsync
-- `http`: HTTP-based transfers for object storage (S3-compatible)
+- `object-storage-api`: HTTP-based transfers for Object Storage APIs (CB-Spider, AWS S3, etc.)
+
+**Note**: File operations on the same host as the migration process are handled automatically based on endpoint configuration. When an endpoint has an empty `endpoint` field, it's considered on the same host and doesn't require explicit transfer method specification.
 
 **Important**: Transfer methods are user-specified via the `Method` field in `TransferOptions`, not auto-detected.
 
@@ -80,7 +81,7 @@ The library supports multiple transfer methods that must be explicitly specified
 
 ```go
 type TransferOptions struct {
-    Method string `json:"method"` // Required: transfer method (e.g., "local", "rsync", "http")
+    Method string `json:"method"` // Required: transfer method (e.g., "rsync", "object-storage-api")
     // ... other fields
 }
 ```
@@ -126,7 +127,7 @@ Always validate user-specified transfer methods:
 
 ```go
 func IsValidTransferMethod(method string) bool {
-    validMethods := []string{"local", "rsync", "http"} // Update this list when adding new methods
+    validMethods := []string{"rsync", "object-storage-api"} // Update this list when adding new methods
     // validation logic
 }
 ```
@@ -256,7 +257,7 @@ When implementing new transfer methods:
 
 1. **Auto-detection**: Never implement auto-detection of transfer methods - always require explicit user specification
 2. **DELETE Exposure**: Keep DELETE operations internal, not user-facing
-3. **Terminology Confusion**: Use "relay node" not "local" in relay mode descriptions
+3. **Terminology Confusion**: Use "relay node" not "intermediate node" in relay mode descriptions
 4. **Naming Inconsistency**: Maintain consistent naming (HttpTransferOption, not S3Option)
 5. **Missing Validation**: Always validate user inputs for transfer methods and operations
 

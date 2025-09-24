@@ -55,13 +55,11 @@ func executeCommand(commandToExecute string, endpoint EndpointDetails, options *
 		sshCmdParts = append(sshCmdParts, userHost, commandToExecute) // user@host "command_to_execute"
 
 		cmd := exec.Command(sshCmdParts[0], sshCmdParts[1:]...)
-		fmt.Printf("Executing remote command on %s...\n", userHost) // For user feedback
 		return cmd.CombinedOutput()
 	} else {
 		// Local execution
 		// Use "sh -c" to handle complex shell commands
 		cmd := exec.Command("sh", "-c", commandToExecute)
-		fmt.Println("Executing local command...")
 		return cmd.CombinedOutput()
 	}
 }
