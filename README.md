@@ -1,3 +1,6 @@
+**<ins>NOTICE: For the time being, CM-Beetle will develop the transx pkg and manage it internally as an independent pkg.</ins>**   
+(see https://github.com/cloud-barista/cm-beetle)
+
 # transx
 
 A Go-based data migration library that supports multiple transfer methods for moving data between databases and storage systems.
